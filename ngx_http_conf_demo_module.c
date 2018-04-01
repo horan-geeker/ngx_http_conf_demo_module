@@ -38,11 +38,25 @@ static ngx_conf_bitmask_t test_bitmasks[] = {
 // define our custom function to set
 static char *ngx_conf_set_my_config(ngx_conf_t *cf, ngx_command_t *cmd, void *conf);
 
+static ngx_int_t ngx_http_test_str_handler(ngx_http_request_t *r);
+
+static char *ngx_conf_set_test_str(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
+{
+    ngx_http_core_loc_conf_t *cscf;
+    ngx_http_core_loc_conf_t *clcf;
+    cscf = ngx_http_conf_get_module_srv_conf(cf, ngx_http_core_module);
+    cscf->handler = ngx_http_test_str_handler;
+    clcf = ngx_http_conf_get_module_loc_conf(cf, ngx_http_core_module);
+    clcf->handler = ngx_http_test_str_handler;
+    ngx_conf_set_str_slot(cf, cmd, conf);
+    return NGX_CONF_OK;
+}
+
 // Structure for all commands
 static ngx_command_t ngx_http_conf_demo_commands[] = {
     {ngx_string("test_str"), // The command name
      NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
-     ngx_conf_set_str_slot, // The command handler
+     ngx_conf_set_test_str, // The command handler
      NGX_HTTP_LOC_CONF_OFFSET,
      offsetof(ngx_http_conf_demo_conf_t, my_str),
      NULL},
@@ -53,7 +67,7 @@ static ngx_command_t ngx_http_conf_demo_commands[] = {
      offsetof(ngx_http_conf_demo_conf_t, my_flag),
      NULL},
     {ngx_string("test_str_array"), // The command name
-     NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
+     NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
      ngx_conf_set_str_array_slot,
      NGX_HTTP_LOC_CONF_OFFSET,
      offsetof(ngx_http_conf_demo_conf_t, my_str_array),
@@ -161,6 +175,31 @@ static char *ngx_conf_set_my_config(ngx_conf_t *cf, ngx_command_t *cmd, void *co
 }
 
 // init command config
+static void *ngx_http_conf_demo_create_srv_conf(ngx_conf_t *cf)
+{
+    ngx_http_conf_demo_conf_t *mycf;
+
+    mycf = (ngx_http_conf_demo_conf_t *)ngx_pcalloc(cf->pool, sizeof(ngx_http_conf_demo_conf_t));
+
+    if (mycf == NULL)
+    {
+        return NULL;
+    }
+    mycf->my_str.len = 0;
+    mycf->my_str.data = 0;
+    mycf->my_flag = NGX_CONF_UNSET;
+    mycf->my_num = NGX_CONF_UNSET;
+    mycf->my_str_array = NGX_CONF_UNSET_PTR;
+    mycf->my_keyval = NULL;
+    mycf->my_off = NGX_CONF_UNSET;
+    mycf->my_msec = NGX_CONF_UNSET_MSEC;
+    mycf->my_sec = NGX_CONF_UNSET;
+    mycf->my_size = NGX_CONF_UNSET_SIZE;
+
+    return mycf;
+}
+
+// init command config
 static void *ngx_http_conf_demo_create_loc_conf(ngx_conf_t *cf)
 {
     ngx_http_conf_demo_conf_t *mycf;
@@ -171,7 +210,6 @@ static void *ngx_http_conf_demo_create_loc_conf(ngx_conf_t *cf)
     {
         return NULL;
     }
-
     mycf->my_flag = NGX_CONF_UNSET;
     mycf->my_num = NGX_CONF_UNSET;
     mycf->my_str_array = NGX_CONF_UNSET_PTR;
@@ -190,19 +228,19 @@ static char *ngx_http_conf_demo_merge_loc_conf(ngx_conf_t *cf, void *parent, voi
     ngx_http_conf_demo_conf_t *conf = (ngx_http_conf_demo_conf_t *)child;
     // parent config has higher priority than sub config
     ngx_conf_merge_str_value(conf->my_str, prev->my_str, "defaultstr");
-
+    // ngx_conf_merge_str_value(prev->my_str, conf->my_str, "defaultstr");
     return NGX_CONF_OK;
 }
 
 static ngx_http_module_t ngx_http_conf_demo_module_ctx = {
     NULL,
     NULL,
-    NULL,
-    NULL,
-    NULL,
-    NULL,
-    ngx_http_conf_demo_create_loc_conf,
-    ngx_http_conf_demo_merge_loc_conf};
+    NULL, /* create main configuration */
+    NULL, /* init main configuration */
+    ngx_http_conf_demo_create_srv_conf, /* create server configuration */
+    NULL, /* merge server configuration */
+    ngx_http_conf_demo_create_loc_conf, /* create location configuration */
+    ngx_http_conf_demo_merge_loc_conf}; /* merge location configuration */
 
 ngx_module_t ngx_http_conf_demo_module = {
     NGX_MODULE_V1,
@@ -217,3 +255,52 @@ ngx_module_t ngx_http_conf_demo_module = {
     NULL,
     NULL,
     NGX_MODULE_V1_PADDING};
+
+static ngx_int_t ngx_http_test_str_handler(ngx_http_request_t *r)
+{
+    ngx_int_t rc = 0;
+    ngx_http_conf_demo_conf_t *hscf;
+    ngx_http_conf_demo_conf_t *hlcf;
+    ngx_str_t response_s;
+    ngx_str_t response_l;
+    ngx_str_t *pstr;
+    ngx_chain_t out;
+    ngx_buf_t *b;
+    rc = ngx_http_discard_request_body(r); // drop http body
+    if (NGX_OK != rc)
+    {
+        return rc;
+    }
+
+    r->headers_out.status = NGX_HTTP_OK;
+
+    rc = ngx_http_send_header(r);
+    if ((NGX_ERROR == rc) || (rc > NGX_OK) || (r->header_only))
+    {
+        return rc;
+    }
+
+    // TODO !!! here location
+    hscf = ngx_http_get_module_srv_conf(r, ngx_http_conf_demo_module);
+    hlcf = ngx_http_get_module_loc_conf(r, ngx_http_conf_demo_module);
+
+    response_s = hscf->my_str;
+    response_l = hlcf->my_str;
+
+    b = ngx_create_temp_buf(r->pool, response_l.len);
+    if (NULL == b)
+    {
+        return NGX_HTTP_INTERNAL_SERVER_ERROR;
+    }
+
+    ngx_memcpy(b->pos, response_l.data, response_l.len);
+    b->last = b->pos + response_l.len;
+    b->last_buf = 1;
+    out.buf = b;
+    out.next = NULL;
+    
+    //pstr = hlcf->my_str_array->elts;
+    //ngx_log_error(NGX_LOG_ERR, r->connection->log, 0, "%V , %V", &pstr[0], &pstr[1]);
+    
+    return ngx_http_output_filter(r, &out);
+}
