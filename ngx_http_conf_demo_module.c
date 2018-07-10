@@ -259,11 +259,11 @@ ngx_module_t ngx_http_conf_demo_module = {
 static ngx_int_t ngx_http_test_str_handler(ngx_http_request_t *r)
 {
     ngx_int_t rc = 0;
-    ngx_http_conf_demo_conf_t *hscf;
+    //ngx_http_conf_demo_conf_t *hscf;
     ngx_http_conf_demo_conf_t *hlcf;
-    ngx_str_t response_s;
+    // ngx_str_t response_s;
     ngx_str_t response_l;
-    ngx_str_t *pstr;
+    // ngx_str_t *pstr;
     ngx_chain_t out;
     ngx_buf_t *b;
     rc = ngx_http_discard_request_body(r); // drop http body
@@ -281,10 +281,10 @@ static ngx_int_t ngx_http_test_str_handler(ngx_http_request_t *r)
     }
 
     // TODO !!! here location
-    hscf = ngx_http_get_module_srv_conf(r, ngx_http_conf_demo_module);
+    //hscf = ngx_http_get_module_srv_conf(r, ngx_http_conf_demo_module);
     hlcf = ngx_http_get_module_loc_conf(r, ngx_http_conf_demo_module);
 
-    response_s = hscf->my_str;
+    // response_s = hscf->my_str;
     response_l = hlcf->my_str;
 
     b = ngx_create_temp_buf(r->pool, response_l.len);
